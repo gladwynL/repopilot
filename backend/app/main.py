@@ -7,17 +7,26 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.errors import register_error_handlers
 from app.api.router import api_router
 from app.core.config import Settings, get_settings
+from app.core.logging_config import configure_logging
+from app.services.ai.openai_provider import create_openai_client
 from app.services.github import create_http_client
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
+    configure_logging()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        async with create_http_client(settings) as github_http:
-            app.state.github_http = github_http
-            yield
+        app.state.settings = settings
+        app.state.openai_client = create_openai_client(settings)
+        try:
+            async with create_http_client(settings) as github_http:
+                app.state.github_http = github_http
+                yield
+        finally:
+            if app.state.openai_client is not None:
+                await app.state.openai_client.close()
 
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
     app.add_middleware(

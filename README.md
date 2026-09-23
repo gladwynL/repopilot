@@ -2,9 +2,11 @@
 
 AI-assisted GitHub pull request review.
 
-> **Status: Phase 1 — GitHub pull request ingestion.**
-> RepoPilot can fetch a GitHub pull request and return its metadata and diffs in a normalized form.
-> AI review (summaries, findings, test suggestions) is **not implemented yet**.
+> **Status: Phase 2 — AI review engine.**
+> RepoPilot can fetch a GitHub pull request and produce an AI-assisted review: a summary, an
+> overall risk level, structured findings with severity and confidence, and test suggestions.
+> Findings are model output and can be wrong or incomplete; treat them as review assistance,
+> not verdicts. Reviews are **not stored** yet, and RepoPilot **never posts to GitHub**.
 
 ## What RepoPilot will become
 
@@ -17,6 +19,17 @@ RepoPilot is planned as a pull request reviewer that will:
 - store review history and present it in a web UI
 
 ## Current state
+
+**Phase 2 — AI review engine**
+
+- `POST /api/reviews/github` runs the full pipeline: GitHub ingestion → review input → LLM →
+  validated `ReviewResult`
+- Provider abstraction with OpenAI (Responses API, strict structured outputs) as the first provider
+- Deterministic file prioritization, per-request token budget, and chunking for large PRs
+- Diffs are annotated with new-file line numbers; line references the diff cannot support are
+  dropped rather than guessed
+- Skipped, truncated, and diff-less files are reported as explicit limitations
+- Conservative retries for transient provider failures; clear API errors for everything else
 
 **Phase 1 — GitHub ingestion**
 
@@ -33,8 +46,8 @@ RepoPilot is planned as a pull request reviewer that will:
 - React + TypeScript + Vite frontend with a placeholder page
 - Pytest, Vitest + Testing Library, Ruff, ESLint, and Prettier configured
 
-**Not implemented yet:** LLM calls, AI summaries or review findings, persistence of reviews,
-authentication, webhooks, posting comments to GitHub, and any frontend beyond the placeholder.
+**Not implemented yet:** persistence of reviews or review history, authentication, webhooks,
+posting comments to GitHub, and any frontend beyond the placeholder.
 
 See [docs/roadmap.md](docs/roadmap.md).
 
@@ -43,6 +56,7 @@ See [docs/roadmap.md](docs/roadmap.md).
 | Area     | Tools                                          |
 | -------- | ---------------------------------------------- |
 | Backend  | Python 3.12, FastAPI, SQLAlchemy 2, Alembic    |
+| AI       | OpenAI Responses API (structured outputs)      |
 | Database | PostgreSQL 16                                  |
 | Frontend | React, TypeScript, Vite                        |
 | Testing  | Pytest, Vitest, Testing Library                |
@@ -60,7 +74,9 @@ See [docs/roadmap.md](docs/roadmap.md).
 │   │   ├── db/           # SQLAlchemy base and session
 │   │   ├── models/       # ORM models
 │   │   ├── schemas/      # Pydantic API schemas
-│   │   ├── services/     # business logic (github.py: GitHub REST client)
+│   │   ├── services/     # business logic
+│   │   │   ├── github.py # GitHub REST client
+│   │   │   └── ai/       # review engine, input builder, prompts, LLM providers
 │   │   └── main.py       # app factory
 │   ├── alembic/          # migrations
 │   └── tests/
@@ -114,7 +130,108 @@ GITHUB_TOKEN=github_pat_...
 A fine-grained personal access token with read-only **Pull requests** and **Contents** access
 is enough. RepoPilot only reads from GitHub. Never commit `.env`.
 
+### AI review
+
+The review endpoint needs an OpenAI API key. Without one it returns `503`; everything else
+keeps working.
+
+```bash
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-5.6-terra   # any Responses API model with structured-output support
+```
+
+Budget and retry settings (`REVIEW_*`, `OPENAI_*`) are listed in [.env.example](.env.example).
+Requests are sent with `store: false`, so OpenAI does not keep them as stored responses.
+
 ## API
+
+### `POST /api/reviews/github`
+
+Fetches a pull request and returns an AI-assisted review. Each call runs a fresh review
+(nothing is cached or stored) and costs one or more model requests.
+
+```bash
+curl -X POST http://localhost:8000/api/reviews/github \
+  -H "Content-Type: application/json" \
+  -d '{"owner": "octocat", "repo": "Hello-World", "pull_number": 1}'
+```
+
+```json
+{
+  "pull_request": { "owner": "octocat", "repo": "Hello-World", "number": 1, "head_sha": "7044a8a..." },
+  "model": "gpt-5.6-terra",
+  "prompt_version": "2026-09-23.1",
+  "summary": "Replaces the README greeting with setup instructions...",
+  "risk_level": "low",
+  "findings": [
+    {
+      "category": "maintainability",
+      "severity": "low",
+      "confidence": 0.7,
+      "title": "Commands and descriptions are run together",
+      "description": "Each line joins a shell command and its explanation with no separator...",
+      "suggestion": "Put commands in a fenced code block and descriptions on separate lines.",
+      "file": "README",
+      "line_start": 2,
+      "line_end": 4
+    }
+  ],
+  "test_suggestions": [],
+  "reviewed_files": ["README"],
+  "truncated_files": [],
+  "skipped_files": [],
+  "limitations": []
+}
+```
+
+(Illustrative output; actual findings depend on the model.)
+
+- `category`: `bug`, `security`, `reliability`, `performance`, `maintainability`,
+  `code_quality`, `testing`
+- `severity` and `risk_level`: `low`, `medium`, `high`, `critical`. `risk_level` is `null`
+  when no diff could be reviewed; no model call is made in that case.
+- `confidence`: `0.0`–`1.0`; findings below `REVIEW_MIN_CONFIDENCE` are dropped
+- `file` / `line_start` / `line_end`: set only when they point into the reviewed diff
+  (line numbers refer to the new version of the file); otherwise `null`
+- `skipped_files[].reason`: `no_patch`, `generated`, or `over_budget`
+
+| Situation                                         | Status                      |
+| ------------------------------------------------- | --------------------------- |
+| Invalid request body                              | 422                         |
+| GitHub errors                                     | same as the ingestion endpoint |
+| AI not configured, or credentials/quota rejected  | 503                         |
+| AI provider rate limited (`Retry-After` if known) | 503                         |
+| AI provider unavailable or invalid model output   | 502                         |
+| AI provider timed out                             | 504                         |
+
+### How large PRs are handled
+
+RepoPilot enforces its own input budget instead of relying on the model's context window:
+
+1. Files with no diff from GitHub (binary or very large) and generated/vendored files
+   (lockfiles, minified bundles, `vendor/`, `dist/`, ...) are skipped and listed.
+2. The remaining files are ranked: source code, then security-sensitive config (CI, Docker,
+   dependency manifests), then tests, then other files, then deletions. Within a tier,
+   larger changes come first; ties break on path. There is no randomness.
+3. Any single diff larger than `REVIEW_MAX_FILE_TOKENS` is cut at a line boundary.
+4. Files are packed into at most `REVIEW_MAX_CHUNKS` requests of `REVIEW_CHUNK_TOKEN_BUDGET`
+   estimated tokens each; anything left over is skipped as over budget.
+5. Chunks are reviewed independently and merged in code: the highest risk wins, findings are
+   deduplicated on file, line, category, and normalized title, and limitations are combined.
+   No extra LLM call is used to merge.
+
+Token counts are estimated as `ceil(characters / 3)`, which deliberately overestimates for
+typical code and avoids depending on a model-specific tokenizer. Chunking trades cross-file
+insight for bounded cost and latency: an issue spanning files in different chunks can be
+missed, and the result says so in `limitations`.
+
+### Limitations
+
+- Review quality depends on the model: findings can be wrong, and real issues can be missed.
+- Only diffs are reviewed. Full file contents and the rest of the repository are not fetched.
+- Reviews are not persisted, and nothing is posted back to GitHub.
+- The evaluation fixtures in `backend/tests/review_eval_cases.py` test the pipeline with
+  canned model output; they do not measure model quality.
 
 ### `GET /api/github/repos/{owner}/{repo}/pulls/{pull_number}`
 
@@ -180,7 +297,8 @@ The app runs at http://localhost:5173.
 
 ## Tests and checks
 
-Tests do not need PostgreSQL or network access; GitHub responses are mocked.
+Tests do not need PostgreSQL, network access, or an OpenAI key. GitHub and OpenAI responses
+are mocked, so the suite never makes paid API calls.
 
 Backend (from `backend/`):
 

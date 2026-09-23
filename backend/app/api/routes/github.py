@@ -3,17 +3,22 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Path
 
 from app.api.deps import get_github_client
-from app.schemas.pull_request import PullRequest
+from app.schemas.pull_request import (
+    GITHUB_OWNER_MAX_LENGTH,
+    GITHUB_OWNER_PATTERN,
+    GITHUB_REPO_MAX_LENGTH,
+    GITHUB_REPO_PATTERN,
+    PullRequest,
+)
 from app.services.github import GitHubClient
 
 router = APIRouter(prefix="/github", tags=["github"])
 
 Owner = Annotated[
-    str, Path(min_length=1, max_length=39, pattern=r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$")
+    str, Path(min_length=1, max_length=GITHUB_OWNER_MAX_LENGTH, pattern=GITHUB_OWNER_PATTERN)
 ]
-# Must contain at least one alphanumeric so "." and ".." are rejected.
 Repo = Annotated[
-    str, Path(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9._-]*[A-Za-z0-9][A-Za-z0-9._-]*$")
+    str, Path(min_length=1, max_length=GITHUB_REPO_MAX_LENGTH, pattern=GITHUB_REPO_PATTERN)
 ]
 PullNumber = Annotated[int, Path(ge=1)]
 

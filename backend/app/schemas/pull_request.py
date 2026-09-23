@@ -10,6 +10,12 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+GITHUB_OWNER_PATTERN = r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$"
+GITHUB_OWNER_MAX_LENGTH = 39
+# Must contain at least one alphanumeric so "." and ".." are rejected.
+GITHUB_REPO_PATTERN = r"^[A-Za-z0-9._-]*[A-Za-z0-9][A-Za-z0-9._-]*$"
+GITHUB_REPO_MAX_LENGTH = 100
+
 PullRequestState = Literal["open", "closed"]
 FileStatus = Literal["added", "removed", "modified", "renamed", "copied", "changed", "unchanged"]
 
