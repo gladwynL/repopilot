@@ -1,6 +1,8 @@
 """RepoPilot's public review contract returned by the review API."""
 
+from datetime import datetime
 from typing import Literal, Self
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -82,6 +84,43 @@ class ReviewResult(_Frozen):
     """Reviewed files whose diff was cut to fit the budget; only the start was reviewed."""
     skipped_files: list[SkippedFile]
     limitations: list[str]
+
+
+class StoredReview(_Frozen):
+    """A persisted review: the Phase 2 ``ReviewResult`` plus storage metadata."""
+
+    id: UUID
+    created_at: datetime
+    is_current: bool
+    """Whether cache lookups currently return this review for its PR commit and config."""
+    review: ReviewResult
+
+
+class ReviewRunResponse(StoredReview):
+    cached: bool
+    """True when an existing review was returned and no model call was made."""
+
+
+class ReviewSummary(_Frozen):
+    id: UUID
+    owner: str
+    repo: str
+    pull_number: int
+    head_sha: str
+    provider: str
+    model: str
+    prompt_version: str
+    risk_level: RiskLevel | None
+    finding_count: int
+    is_current: bool
+    created_at: datetime
+
+
+class ReviewHistoryPage(_Frozen):
+    items: list[ReviewSummary]
+    total: int
+    limit: int
+    offset: int
 
 
 class GitHubReviewRequest(BaseModel):

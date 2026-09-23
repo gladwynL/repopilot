@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from app.db.errors import PersistenceError
 from app.services.ai.base import (
     AIConfigurationError,
     AIProviderError,
@@ -47,6 +48,11 @@ async def handle_ai_error(_: Request, exc: AIProviderError) -> JSONResponse:
     return _error_response(exc.message, status_code, retry_after)
 
 
+async def handle_persistence_error(_: Request, exc: PersistenceError) -> JSONResponse:
+    return _error_response(exc.message, status.HTTP_503_SERVICE_UNAVAILABLE)
+
+
 def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(GitHubError, handle_github_error)
     app.add_exception_handler(AIProviderError, handle_ai_error)
+    app.add_exception_handler(PersistenceError, handle_persistence_error)

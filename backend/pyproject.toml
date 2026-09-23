@@ -14,8 +14,13 @@ select = ["E", "W", "F", "I", "B", "UP", "SIM", "C4", "RUF"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
+# The local alembic/ migrations directory would otherwise make the package look first-party.
+known-third-party = ["alembic"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-ra"
+markers = [
+    "postgres: needs a disposable PostgreSQL database in TEST_DATABASE_URL (skipped otherwise)",
+]

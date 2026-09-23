@@ -1,16 +1,20 @@
 from logging.config import fileConfig
 
+from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from alembic import context
 from app.core.config import get_settings
 from app.models import Base
 
 config = context.config
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# Callers (e.g. the integration tests) may point Alembic at another database explicitly.
+if not config.get_main_option("sqlalchemy.url"):
+    # ConfigParser treats "%" as interpolation, so escape it (e.g. URL-encoded passwords).
+    config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Keep loggers configured by the host process (e.g. the app or the test runner) enabled.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

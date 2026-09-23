@@ -1,13 +1,22 @@
 """Builders and fakes shared by the review-engine tests. No network or paid API calls."""
 
 import json
+import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx2 as httpx
 from openai import AsyncOpenAI
 
 from app.schemas.pull_request import PullRequest, PullRequestFile
+from app.schemas.review import (
+    ReviewedPullRequest,
+    ReviewHistoryPage,
+    ReviewResult,
+    ReviewSummary,
+    StoredReview,
+)
 from app.services.ai.base import (
     ModelFinding,
     ModelReview,
@@ -176,3 +185,111 @@ def make_openai_model(
         max_retries=max_retries,
         sleep=fake_sleep,
     )
+
+
+# --- persistence fakes -----------------------------------------------------------
+
+
+class InMemoryReviewStore:
+    """Mirrors ReviewRepository semantics without a database (see the Postgres tests
+    for the real implementation)."""
+
+    def __init__(self) -> None:
+        self.rows: list[StoredReview] = []
+        self.keys: dict[uuid.UUID, str] = {}
+        self.fail_with: Exception | None = None
+
+    def _check(self) -> None:
+        if self.fail_with is not None:
+            raise self.fail_with
+
+    def get(self, review_id: uuid.UUID) -> StoredReview | None:
+        self._check()
+        return next((r for r in self.rows if r.id == review_id), None)
+
+    def get_current(self, cache_key: str) -> StoredReview | None:
+        self._check()
+        return next((r for r in self.rows if r.is_current and self.keys[r.id] == cache_key), None)
+
+    def list(
+        self,
+        *,
+        owner: str | None = None,
+        repo: str | None = None,
+        pull_number: int | None = None,
+        limit: int,
+        offset: int,
+    ) -> ReviewHistoryPage:
+        self._check()
+        rows = [
+            r
+            for r in reversed(self.rows)
+            if (owner is None or r.review.pull_request.owner.lower() == owner.lower())
+            and (repo is None or r.review.pull_request.repo.lower() == repo.lower())
+            and (pull_number is None or r.review.pull_request.number == pull_number)
+        ]
+        items = [
+            ReviewSummary(
+                id=r.id,
+                owner=r.review.pull_request.owner,
+                repo=r.review.pull_request.repo,
+                pull_number=r.review.pull_request.number,
+                head_sha=r.review.pull_request.head_sha,
+                provider="fake",
+                model=r.review.model,
+                prompt_version=r.review.prompt_version,
+                risk_level=r.review.risk_level,
+                finding_count=len(r.review.findings),
+                is_current=r.is_current,
+                created_at=r.created_at,
+            )
+            for r in rows[offset : offset + limit]
+        ]
+        return ReviewHistoryPage(items=items, total=len(rows), limit=limit, offset=offset)
+
+    def save(
+        self,
+        result: ReviewResult,
+        *,
+        cache_key: str,
+        review_config: dict[str, Any],
+        provider: str,
+        replace_current: bool,
+    ) -> StoredReview:
+        self._check()
+        existing = self.get_current(cache_key)
+        if existing is not None and replace_current:
+            index = self.rows.index(existing)
+            self.rows[index] = existing.model_copy(update={"is_current": False})
+        stored = StoredReview(
+            id=uuid.uuid4(),
+            created_at=datetime.now(UTC),
+            is_current=existing is None or replace_current,
+            review=result,
+        )
+        self.rows.append(stored)
+        self.keys[stored.id] = cache_key
+        return stored
+
+
+def review_result(
+    *, owner: str = "octo-org", repo: str = "widgets", number: int = 42, head_sha: str = "b" * 40,
+    **overrides: Any,
+) -> ReviewResult:  # fmt: skip
+    values: dict[str, Any] = {
+        "pull_request": ReviewedPullRequest(
+            owner=owner, repo=repo, number=number, head_sha=head_sha
+        ),
+        "model": "gpt-5.6-terra",
+        "prompt_version": "test-prompt",
+        "summary": "A stored review.",
+        "risk_level": "low",
+        "findings": [],
+        "test_suggestions": [],
+        "reviewed_files": ["src/app.py"],
+        "truncated_files": [],
+        "skipped_files": [],
+        "limitations": [],
+    }
+    values.update(overrides)
+    return ReviewResult(**values)

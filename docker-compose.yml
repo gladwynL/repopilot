@@ -18,5 +18,24 @@ services:
       timeout: 5s
       retries: 10
 
+  # Disposable database for integration tests: data lives in tmpfs and is gone when the
+  # container stops. Start with `docker compose --profile test up -d --wait test-db`.
+  test-db:
+    image: postgres:16-alpine
+    profiles: [test]
+    environment:
+      POSTGRES_USER: repopilot
+      POSTGRES_PASSWORD: repopilot
+      POSTGRES_DB: repopilot_test
+    ports:
+      - '${POSTGRES_TEST_PORT:-55432}:5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U repopilot -d repopilot_test']
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
 volumes:
   postgres_data:
