@@ -1,0 +1,67 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.label {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.control {
+  width: 100%;
+  min-height: 2.25rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  color: var(--text);
+  font: inherit;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.control::placeholder {
+  color: var(--text-subtle);
+}
+
+.control:focus {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.control:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 0;
+}
+
+.control[aria-invalid='true'] {
+  border-color: var(--danger-fg);
+}
+
+.control:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+}
+
+.hint,
+.error {
+  font-size: 0.8rem;
+}
+
+.hint {
+  color: var(--text-muted);
+}
+
+.error {
+  color: var(--danger-fg);
+  font-weight: 500;
+}

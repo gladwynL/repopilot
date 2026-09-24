@@ -2,12 +2,14 @@
 
 AI-assisted GitHub pull request review.
 
-> **Status: Phase 3 — persistence and evaluation.**
+> **Status: Phase 4 — review dashboard.**
 > RepoPilot fetches a GitHub pull request, produces an AI-assisted review (summary, risk level,
-> findings with severity and confidence, test suggestions), and stores it in PostgreSQL.
-> Unchanged PRs are served from storage without another model call.
+> findings with severity and confidence, test suggestions), stores it in PostgreSQL, and
+> presents it in a web dashboard with review history. Unchanged PRs are served from storage
+> without another model call.
 > Findings are model output and can be wrong or incomplete; treat them as review assistance,
-> not verdicts. RepoPilot **never posts to GitHub**, and there is no review UI yet.
+> not verdicts. RepoPilot **never posts to GitHub**. There is **no authentication**: anyone who
+> can reach the app can run reviews and read the full history. It is not deployed anywhere.
 
 ## What RepoPilot will become
 
@@ -20,6 +22,17 @@ RepoPilot is planned as a pull request reviewer that will:
 - store review history and present it in a web UI
 
 ## Current state
+
+**Phase 4 — review dashboard**
+
+- React dashboard to start a review from a PR URL or owner/repo/number, with an honest
+  pending state (elapsed time, no fake progress)
+- Review page: AI-assessed risk, summary, findings (severity, category, confidence,
+  file/line), test suggestions, coverage and limitations, cached/new and current/superseded
+  markers, and a deliberate "Run review again"
+- Paginated, filterable review history; every stored review has a shareable URL
+- Friendly error, loading, and empty states; responsive down to phone width; light and dark
+  themes follow the system setting
 
 **Phase 3 — persistence and evaluation**
 
@@ -50,8 +63,8 @@ RepoPilot is planned as a pull request reviewer that will:
 - FastAPI, SQLAlchemy 2, Alembic, PostgreSQL 16 via Docker Compose, React + Vite placeholder
 - Pytest, Vitest + Testing Library, Ruff, ESLint, and Prettier
 
-**Not implemented yet:** review UI, authentication, webhooks, posting comments to GitHub,
-CI/CD, and deployment.
+**Not implemented yet:** authentication, webhooks, posting comments to GitHub, CI/CD, and
+deployment.
 
 See [docs/roadmap.md](docs/roadmap.md).
 
@@ -62,7 +75,7 @@ See [docs/roadmap.md](docs/roadmap.md).
 | Backend  | Python 3.12, FastAPI, SQLAlchemy 2, Alembic |
 | AI       | OpenAI Responses API (structured outputs)   |
 | Database | PostgreSQL 16                               |
-| Frontend | React, TypeScript, Vite                     |
+| Frontend | React 19, TypeScript, Vite, React Router    |
 | Testing  | Pytest, Vitest, Testing Library             |
 | Quality  | Ruff, ESLint, Prettier                      |
 | Infra    | Docker Compose (GitHub Actions CI planned)  |
@@ -88,6 +101,14 @@ See [docs/roadmap.md](docs/roadmap.md).
 │   ├── alembic/            # migrations
 │   └── tests/              # unit tests; tests/postgres/ needs a real database
 ├── frontend/
+│   └── src/
+│       ├── api/            # typed API client, error mapping
+│       ├── components/     # design-system primitives and app shell
+│       ├── features/reviews/ # review form, review view, history table, labels
+│       ├── hooks/          # data loading, elapsed-time
+│       ├── pages/          # route screens
+│       ├── types/          # API response types (mirror backend schemas)
+│       └── utils/          # formatting
 ├── docs/
 ├── docker-compose.yml
 └── .env.example
@@ -100,6 +121,14 @@ Prerequisites: Python 3.12, Node.js 20+, Docker.
 ```bash
 cp .env.example .env
 ```
+
+The app runs as three processes, each in its own terminal:
+
+1. PostgreSQL: `docker compose up -d db`
+2. Backend (from `backend/`): `uvicorn app.main:app --reload` → http://localhost:8000
+3. Frontend (from `frontend/`): `npm run dev` → http://localhost:5173
+
+First-time setup for each is below.
 
 ### Database
 
@@ -134,7 +163,19 @@ npm install
 npm run dev
 ```
 
-The app runs at http://localhost:5173 (placeholder page only).
+Open http://localhost:5173. In development (and `npm run preview`), the Vite server proxies
+`/api` to the backend at `http://localhost:8000`, so no CORS setup is needed.
+
+Frontend configuration (`frontend/.env.example`; copy to `frontend/.env` to change it):
+
+| Variable            | Default                 | Purpose                                                        |
+| ------------------- | ----------------------- | -------------------------------------------------------------- |
+| `VITE_API_BASE_URL` | empty (same origin)     | API origin baked into the build, e.g. `http://localhost:8000`. |
+| `API_PROXY_TARGET`  | `http://localhost:8000` | Where the dev/preview proxy sends `/api` requests.             |
+
+`VITE_*` values are compiled into the browser bundle, so never put secrets there. If you set
+`VITE_API_BASE_URL` to another origin, add the frontend's origin to the backend's
+`CORS_ORIGINS`.
 
 ### GitHub access
 
@@ -156,6 +197,43 @@ OPENAI_MODEL=gpt-5.6-terra   # any Responses API model with structured-output su
 
 Budget and retry settings (`REVIEW_*`, `OPENAI_*`) are listed in [.env.example](.env.example).
 Requests are sent with `store: false`, so OpenAI does not keep them as stored responses.
+
+## Web app
+
+Screenshots: _to be added._
+
+| Route                | Screen                                                              |
+| -------------------- | ------------------------------------------------------------------- |
+| `/`                  | Dashboard: start a review, see the five most recent reviews         |
+| `/reviews`           | History: newest first, filter by owner/repo/PR number, 20 per page  |
+| `/reviews/:reviewId` | One stored review (the same view is used for new and old reviews)   |
+| anything else        | 404 page                                                            |
+
+**Review flow**
+
+1. Paste a PR URL (`https://github.com/owner/repo/pull/123`) or enter owner, repository, and
+   PR number. Input is validated with the same rules as the API.
+2. While the request runs, the page shows the target PR, the elapsed time, and a static
+   description of what RepoPilot does. The API reports no progress, so the page shows none.
+3. When the review is ready, its page opens. A **Cached review** badge means this exact
+   commit was already reviewed with the same settings and no new AI request was made;
+   **New review** means one was.
+4. **Run review again** always runs a new AI review of the PR's current commit (it calls
+   `POST /api/reviews/github?force=true`) and opens the result. The earlier review stays in
+   history marked **Superseded**.
+
+**Reading a review**
+
+- *AI-assessed risk*: low, medium, high, or critical, shown with a distinct shape and a
+  label as well as a color. **Not assessed** means no diff could be reviewed.
+- *Findings* are shown in the API's order (most severe, most confident first) and can be
+  filtered by severity and category. Confidence is the model's own estimate, rounded to a
+  whole percentage; it is not a calibrated probability.
+- File references (`path:line` or `path:start–end`) are plain text. They only appear when the
+  line is in the reviewed diff, and they are not linked to GitHub, because a link to a
+  specific line can't be built reliably for every case (for example deleted files or forks).
+- *Coverage & limitations* lists skipped files (with the reason), partially reviewed files,
+  and limitations reported by the pipeline and the model.
 
 ## API
 
@@ -392,6 +470,8 @@ npm run lint
 npm run format:check
 npm run build
 ```
+
+Frontend tests (Vitest + Testing Library) mock the API layer, so they need no backend.
 
 ## License
 

@@ -1,0 +1,92 @@
+.risk {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid;
+  border-radius: var(--radius-md);
+}
+
+.glyph {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 0.1rem;
+}
+
+.caption {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.label {
+  font-size: 1.15rem;
+  font-weight: 650;
+}
+
+.description {
+  margin-top: 0.1rem;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.risk.low,
+.risk.none {
+  background: var(--surface-subtle);
+}
+
+.low {
+  color: var(--info-fg);
+  border-color: var(--info-border);
+}
+
+.medium {
+  color: var(--warning-fg);
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+
+.high {
+  color: var(--severe-fg);
+  background: var(--severe-bg);
+  border-color: var(--severe-border);
+}
+
+.critical {
+  color: var(--danger-fg);
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+}
+
+.none {
+  color: var(--neutral-fg);
+  border-color: var(--neutral-border);
+}
+
+.inline.medium,
+.inline.high,
+.inline.critical {
+  background: none;
+}
+
+.risk .label,
+.risk .caption,
+.risk .description {
+  color: inherit;
+}
+
+.risk .caption,
+.risk .description {
+  opacity: 0.85;
+}

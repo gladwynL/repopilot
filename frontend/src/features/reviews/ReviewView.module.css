@@ -1,0 +1,250 @@
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Header ------------------------------------------------------------------------------ */
+
+.header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 20rem);
+  gap: 1.5rem;
+  padding: 1.35rem 1.4rem;
+}
+
+.headerMain {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.eyebrow {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.title {
+  font-size: 1.5rem;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.title a {
+  color: var(--text);
+}
+
+.title a:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.repo {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.number {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.externalIcon {
+  margin-left: 0.35rem;
+  color: var(--text-subtle);
+  vertical-align: 0.1em;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.75rem;
+  margin: 0;
+}
+
+.facts dt {
+  color: var(--text-subtle);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.facts dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.headerNote {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.headerRisk {
+  min-width: 0;
+}
+
+/* Body layout ------------------------------------------------------------------------- */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(17rem, 21rem);
+  align-items: start;
+  gap: 1.25rem;
+}
+
+.primary,
+.secondary {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .header,
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Sections ---------------------------------------------------------------------------- */
+
+.summary {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+.filters > div {
+  min-width: 11rem;
+}
+
+.clearFilters {
+  margin-bottom: 0.15rem;
+}
+
+.help {
+  margin-bottom: 0.9rem;
+  color: var(--text-subtle);
+  font-size: 0.8rem;
+}
+
+.findingList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plainList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.suggestion {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.listIcon {
+  flex: none;
+  margin-top: 0.2rem;
+  color: var(--text-muted);
+}
+
+.suggestionBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.path {
+  font-size: 0.8rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.coverage {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.subheading {
+  margin-bottom: 0.4rem;
+  font-size: 0.875rem;
+}
+
+.bulletList {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.bulletList li + li {
+  margin-top: 0.3rem;
+}
+
+.fileList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fileList li {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fileNote {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.details summary {
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}

@@ -1,0 +1,99 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.critical {
+  border-left-color: var(--danger-fg);
+}
+
+.high {
+  border-left-color: var(--severe-fg);
+}
+
+.medium {
+  border-left-color: var(--warning-fg);
+}
+
+.low {
+  border-left-color: var(--info-fg);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.confidence {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+
+.title {
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.description {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.suggestion {
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-muted);
+  overflow-wrap: anywhere;
+}
+
+.suggestionLabel {
+  margin-bottom: 0.15rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.location {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.location svg {
+  flex: none;
+}
+
+.path {
+  color: var(--text);
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.noFile {
+  font-style: italic;
+}
+
+@media (max-width: 560px) {
+  .confidence {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+}

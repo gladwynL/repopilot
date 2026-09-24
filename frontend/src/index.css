@@ -1,29 +1,103 @@
 :root {
-  --color-bg: #f9fafb;
-  --color-text: #111827;
-  --color-muted: #4b5563;
-  --color-border: #d1d5db;
-  --color-accent: #047857;
+  color-scheme: light;
 
-  color-scheme: light dark;
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    sans-serif;
-  color: var(--color-text);
-  background-color: var(--color-bg);
+  --bg: #f6f8fa;
+  --surface: #ffffff;
+  --surface-subtle: #f6f8fa;
+  --surface-hover: #eef1f4;
+  --border: #d1d9e0;
+  --border-muted: #e1e6eb;
+  --text: #1f2328;
+  --text-muted: #59636e;
+  --text-subtle: #6e7781;
+  --accent: #0969da;
+  --accent-hover: #0550ae;
+  --accent-contrast: #ffffff;
+  --accent-subtle: #ddf4ff;
+  --focus-ring: #0969da;
+  --brand: #1a7f37;
+
+  /* Tones used by badges, alerts, and risk indicators (text on subtle background). */
+  --neutral-fg: #59636e;
+  --neutral-bg: #eef1f4;
+  --neutral-border: #d1d9e0;
+  --info-fg: #0550ae;
+  --info-bg: #ddf4ff;
+  --info-border: #b6e3ff;
+  --success-fg: #116329;
+  --success-bg: #dafbe1;
+  --success-border: #aceebb;
+  --warning-fg: #7d4e00;
+  --warning-bg: #fff8c5;
+  --warning-border: #eed888;
+  --severe-fg: #953800;
+  --severe-bg: #fff1e5;
+  --severe-border: #ffd8b5;
+  --danger-fg: #a40e26;
+  --danger-bg: #ffebe9;
+  --danger-border: #ffcecb;
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 0 rgb(31 35 40 / 4%);
+  --shadow-md: 0 3px 12px rgb(31 35 40 / 8%);
+  --content-width: 1120px;
+
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  background-color: var(--bg);
   -webkit-font-smoothing: antialiased;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-bg: #0d1117;
-    --color-text: #e6edf3;
-    --color-muted: #9ca3af;
-    --color-border: #30363d;
-    --color-accent: #34d399;
+    color-scheme: dark;
+
+    --bg: #0d1117;
+    --surface: #151b23;
+    --surface-subtle: #10151c;
+    --surface-hover: #1c2330;
+    --border: #3d444d;
+    --border-muted: #2a313c;
+    --text: #e6edf3;
+    --text-muted: #9198a1;
+    --text-subtle: #7d8590;
+    --accent: #4493f8;
+    --accent-hover: #6cb0ff;
+    --accent-contrast: #0d1117;
+    --accent-subtle: #121d2f;
+    --focus-ring: #4493f8;
+    --brand: #3fb950;
+
+    --neutral-fg: #9198a1;
+    --neutral-bg: #212830;
+    --neutral-border: #3d444d;
+    --info-fg: #79c0ff;
+    --info-bg: #0c2d6b66;
+    --info-border: #1f6feb66;
+    --success-fg: #56d364;
+    --success-bg: #03361566;
+    --success-border: #23863666;
+    --warning-fg: #e3b341;
+    --warning-bg: #4b290066;
+    --warning-border: #9e6a0366;
+    --severe-fg: #ffa657;
+    --severe-bg: #5a1e0266;
+    --severe-border: #bd561d66;
+    --danger-fg: #ff7b72;
+    --danger-bg: #67060c66;
+    --danger-border: #da363366;
+
+    --shadow-sm: 0 1px 0 rgb(1 4 9 / 30%);
+    --shadow-md: 0 8px 24px rgb(1 4 9 / 40%);
   }
 }
 
@@ -33,6 +107,68 @@
   box-sizing: border-box;
 }
 
+html,
 body {
   margin: 0;
+}
+
+body {
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  line-height: 1.25;
+  font-weight: 600;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+code,
+kbd,
+pre {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

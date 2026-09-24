@@ -6,7 +6,7 @@
 | 1     | GitHub integration: fetch a PR and its diffs, normalize them      | Done        |
 | 2     | AI review engine: summaries and structured findings from a PR     | Done        |
 | 3     | Review persistence, caching, history, evaluation framework        | Done        |
-| 4     | Review dashboard (frontend)                                       | Not started |
+| 4     | Review dashboard (frontend)                                       | Done        |
 | 5+    | CI/CD, deployment                                                 | Not started |
 
 ## Phase 1 — GitHub ingestion
@@ -79,7 +79,28 @@ Known limits:
 - History uses offset pagination; fine for dashboard-sized data, not for very deep paging.
 - Reviews are never deleted; there is no retention policy yet.
 
-## Phase 4 — next
+## Phase 4 — review dashboard
 
-Planned: a review dashboard on top of `GET /api/reviews`, `GET /api/reviews/{id}`, and
-`POST /api/reviews/github`. Details will be planned when the phase begins.
+Delivered (`frontend/src/`):
+
+- Routes: `/` (dashboard and new review), `/reviews` (history), `/reviews/:reviewId`, 404
+- Typed API client (`api/`) with central error mapping; pages never call `fetch` directly
+- One `ReviewView` for fresh, cached, and historical reviews
+- Small design system (Button, Badge, Card, Alert, EmptyState, PageHeader, fields, Spinner)
+  with CSS Modules and system light/dark themes
+- Vite dev/preview proxy for `/api`; `VITE_API_BASE_URL` for other setups
+- Vitest + Testing Library tests with the API layer mocked
+
+Known limits:
+
+- No authentication: the dashboard and full history are visible to anyone who can reach it.
+- A new review is a single long HTTP request with no progress reporting; leaving the page
+  cancels the browser request (the backend may still finish and store the review).
+- The cached/new badge is only known right after a review request; reviews opened later by
+  URL show current/superseded status instead.
+- File references are plain text, not links to GitHub.
+- Screenshots in the README are still to be added.
+
+## Phase 5 — next
+
+Planned: CI/CD and deployment. Details will be planned when the phase begins.

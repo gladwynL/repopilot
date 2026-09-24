@@ -1,0 +1,60 @@
+.alert {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid;
+  border-radius: var(--radius-md);
+  color: var(--text);
+}
+
+.icon {
+  flex: none;
+  margin-top: 0.2rem;
+}
+
+.content {
+  min-width: 0;
+}
+
+.title {
+  font-weight: 600;
+}
+
+.body {
+  margin-top: 0.2rem;
+  color: var(--text-muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.info {
+  background: var(--info-bg);
+  border-color: var(--info-border);
+}
+
+.info .icon {
+  color: var(--info-fg);
+}
+
+.warning {
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+
+.warning .icon {
+  color: var(--warning-fg);
+}
+
+.danger {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+}
+
+.danger .icon {
+  color: var(--danger-fg);
+}

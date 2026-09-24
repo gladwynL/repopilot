@@ -1,0 +1,36 @@
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.text {
+  min-width: 0;
+}
+
+.eyebrow {
+  margin-bottom: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.title {
+  font-size: 1.6rem;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.description {
+  margin-top: 0.35rem;
+  max-width: 44rem;
+  color: var(--text-muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}

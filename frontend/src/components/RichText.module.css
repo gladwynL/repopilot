@@ -1,0 +1,7 @@
+.code {
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--neutral-bg);
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}

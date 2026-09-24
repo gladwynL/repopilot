@@ -1,0 +1,57 @@
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 2.25rem 1rem;
+  text-align: center;
+}
+
+.compact {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  text-align: left;
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin-bottom: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text-muted);
+  background: var(--surface-subtle);
+}
+
+.compact .icon {
+  width: auto;
+  height: auto;
+  margin: 0;
+  border: 0;
+  background: none;
+}
+
+.title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.compact .title {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.body {
+  max-width: 34rem;
+  color: var(--text-muted);
+}
+
+.action {
+  margin-top: 0.75rem;
+}
