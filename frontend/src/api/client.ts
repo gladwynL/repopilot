@@ -4,6 +4,9 @@
  */
 export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '');
 
+/** Dispatched on `window` whenever the API answers 401, e.g. when a session expires. */
+export const UNAUTHORIZED_EVENT = 'repopilot:unauthorized';
+
 /** A failed API call. `status` is 0 when the API could not be reached at all. */
 export class ApiError extends Error {
   readonly status: number;
@@ -45,6 +48,8 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     response = await fetch(buildUrl(path, query), {
       method,
       signal,
+      // Session cookies: same origin by default; cross-origin only when an API URL is configured.
+      credentials: API_BASE_URL ? 'include' : 'same-origin',
       headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
@@ -53,6 +58,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     throw new ApiError(0, null);
   }
 
+  if (response.status === 401) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
   if (!response.ok) {
     throw new ApiError(
       response.status,
@@ -60,6 +66,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       parseRetryAfter(response.headers.get('Retry-After')),
     );
   }
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 

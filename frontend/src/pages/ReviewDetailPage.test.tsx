@@ -65,7 +65,7 @@ describe('ReviewDetailPage', () => {
   });
 
   it('uses the POST response from navigation state without refetching', () => {
-    renderApp(`/reviews/${ID}`, { run: makeRun({ cached: false }) });
+    renderApp(`/reviews/${ID}`, { state: { run: makeRun({ cached: false }) } });
 
     expect(screen.getByText('New review')).toBeInTheDocument();
     expect(getReview).not.toHaveBeenCalled();

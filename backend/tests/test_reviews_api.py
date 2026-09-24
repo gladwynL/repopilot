@@ -1,6 +1,7 @@
 """Review API tests: real app wiring and dependencies, mocked GitHub/OpenAI HTTP, and an
 in-memory review store. The same flows run against PostgreSQL in tests/postgres/."""
 
+import asyncio
 import json
 import uuid
 from collections.abc import Callable, Iterator
@@ -407,3 +408,14 @@ def test_history_database_failure_is_503(harness: Harness) -> None:
 
     assert response.status_code == 503
     assert response.json() == {"detail": "Review storage is unavailable."}
+
+
+def test_review_capacity_limit_returns_429(harness: Harness) -> None:
+    harness.client.app.state.review_slots = asyncio.Semaphore(0)
+
+    response = harness.post()
+
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "30"
+    assert "maximum number of AI reviews" in response.json()["detail"]
+    assert harness.openai_requests == []

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, apiRequest, buildUrl } from './client.ts';
+import { ApiError, apiRequest, buildUrl, UNAUTHORIZED_EVENT } from './client.ts';
 import { toUserFacingError } from './errors.ts';
 import { createReview, listReviews } from './reviews.ts';
 
@@ -98,6 +98,25 @@ describe('error handling', () => {
     expect(toUserFacingError(error).title).toBe('Invalid request');
   });
 
+  it('announces 401 responses so the app can show the sign-in screen', async () => {
+    mockFetch(json(401, { detail: 'Sign in to use RepoPilot.' }));
+    const listener = vi.fn();
+    window.addEventListener(UNAUTHORIZED_EVENT, listener);
+
+    await apiRequest('/api/reviews').catch(() => undefined);
+
+    window.removeEventListener(UNAUTHORIZED_EVENT, listener);
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends same-origin credentials by default', async () => {
+    const fetchMock = mockFetch(json(200, {}));
+
+    await apiRequest('/api/auth/me');
+
+    expect(fetchMock.mock.calls[0][1]?.credentials).toBe('same-origin');
+  });
+
   it('reports network failures as status 0', async () => {
     mockFetch(new TypeError('Failed to fetch'));
 
@@ -109,7 +128,7 @@ describe('error handling', () => {
 
   it.each([
     [404, 'Repository or pull request not found on GitHub.', 'Not found', false],
-    [429, 'GitHub API rate limit exceeded.', 'GitHub rate limit reached', true],
+    [429, 'GitHub API rate limit exceeded.', 'Too many requests', true],
     [503, 'AI review is not configured on this server.', 'Service unavailable', true],
     [502, 'The AI provider is unavailable.', 'Upstream service error', true],
     [504, 'The AI provider did not respond in time.', 'Review timed out', true],

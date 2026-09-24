@@ -14,6 +14,7 @@ from app.services.github import (
     GitHubNotFoundError,
     GitHubRateLimitError,
 )
+from app.services.reviews import ReviewCapacityError
 
 _GITHUB_ERROR_STATUS: dict[type[GitHubError], int] = {
     GitHubNotFoundError: status.HTTP_404_NOT_FOUND,
@@ -52,7 +53,12 @@ async def handle_persistence_error(_: Request, exc: PersistenceError) -> JSONRes
     return _error_response(exc.message, status.HTTP_503_SERVICE_UNAVAILABLE)
 
 
+async def handle_review_capacity(_: Request, exc: ReviewCapacityError) -> JSONResponse:
+    return _error_response(exc.message, status.HTTP_429_TOO_MANY_REQUESTS, exc.retry_after)
+
+
 def register_error_handlers(app: FastAPI) -> None:
+    app.add_exception_handler(ReviewCapacityError, handle_review_capacity)
     app.add_exception_handler(GitHubError, handle_github_error)
     app.add_exception_handler(AIProviderError, handle_ai_error)
     app.add_exception_handler(PersistenceError, handle_persistence_error)

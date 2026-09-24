@@ -1,5 +1,6 @@
 """Review orchestration with persistence: GitHub → cache lookup → AI review → storage."""
 
+import asyncio
 import logging
 from collections.abc import Callable
 from functools import partial
@@ -13,6 +14,13 @@ from app.services.ai.review_engine import ReviewEngine
 from app.services.github import GitHubClient
 
 logger = logging.getLogger(__name__)
+
+
+class ReviewCapacityError(Exception):
+    """All AI review slots in this process are busy."""
+
+    message = "RepoPilot is already running the maximum number of AI reviews. Try again shortly."
+    retry_after = 30
 
 
 class ReviewStore(Protocol):
@@ -38,13 +46,20 @@ class ReviewService:
         store: ReviewStore,
         config: ReviewConfig,
         engine_factory: Callable[[], ReviewEngine],
+        *,
+        review_slots: asyncio.Semaphore | None = None,
     ) -> None:
         """``engine_factory`` is only called on a cache miss, so cached reviews can be
-        served even when no AI provider is configured."""
+        served even when no AI provider is configured.
+
+        ``review_slots`` caps concurrent AI reviews in this process (not across instances).
+        When all slots are busy the request fails fast instead of queueing a long request.
+        """
         self._github = github
         self._store = store
         self._config = config
         self._engine_factory = engine_factory
+        self._review_slots = review_slots or asyncio.Semaphore(1)
 
     async def review_pull_request(
         self, owner: str, repo: str, pull_number: int, *, force: bool = False
@@ -63,7 +78,13 @@ class ReviewService:
                 return _response(cached, cached=True)
 
         logger.info("review.cache_miss pr=%s force=%s", pr_label, force)
-        result = await self._engine_factory().review_pull_request(pr)
+        engine = self._engine_factory()
+        # No await between the check and the acquire, so this cannot race in one event loop.
+        if self._review_slots.locked():
+            logger.warning("review.capacity_exceeded pr=%s", pr_label)
+            raise ReviewCapacityError()
+        async with self._review_slots:
+            result = await engine.review_pull_request(pr)
         # The model call is not retried if saving fails, so a storage error never costs a
         # second paid review.
         stored = await to_thread.run_sync(

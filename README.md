@@ -2,14 +2,14 @@
 
 AI-assisted GitHub pull request review.
 
-> **Status: Phase 4 — review dashboard.**
+> **Status: Phase 5 — production-ready, not yet deployed.**
 > RepoPilot fetches a GitHub pull request, produces an AI-assisted review (summary, risk level,
 > findings with severity and confidence, test suggestions), stores it in PostgreSQL, and
-> presents it in a web dashboard with review history. Unchanged PRs are served from storage
-> without another model call.
+> presents it in a web dashboard with review history. Production containers, CI, and a
+> GitHub sign-in gate with an allowlist are in place. **No public instance exists yet**, and
+> no review has yet been run against the live OpenAI API.
 > Findings are model output and can be wrong or incomplete; treat them as review assistance,
-> not verdicts. RepoPilot **never posts to GitHub**. There is **no authentication**: anyone who
-> can reach the app can run reviews and read the full history. It is not deployed anywhere.
+> not verdicts. RepoPilot **never posts to GitHub**.
 
 ## What RepoPilot will become
 
@@ -22,6 +22,19 @@ RepoPilot is planned as a pull request reviewer that will:
 - store review history and present it in a web UI
 
 ## Current state
+
+**Phase 5 — production readiness**
+
+- Sign in with GitHub (OAuth with state + PKCE) and an allowlist; signed, HttpOnly, Secure,
+  SameSite=Lax session cookie; all review and PR endpoints require sign-in when enabled
+- Production images: non-root FastAPI image and a Caddy image serving the SPA and proxying
+  `/api` on one HTTPS origin
+- `docker-compose.prod.yml` with a one-shot migration step, a private database network, and
+  health/readiness gating
+- Startup validation of production configuration; API docs disabled in production; per-process
+  cap on concurrent AI reviews
+- GitHub Actions CI: backend, frontend, PostgreSQL integration + migrations, image build and
+  production-stack smoke test, and repository hygiene checks
 
 **Phase 4 — review dashboard**
 
@@ -63,8 +76,8 @@ RepoPilot is planned as a pull request reviewer that will:
 - FastAPI, SQLAlchemy 2, Alembic, PostgreSQL 16 via Docker Compose, React + Vite placeholder
 - Pytest, Vitest + Testing Library, Ruff, ESLint, and Prettier
 
-**Not implemented yet:** authentication, webhooks, posting comments to GitHub, CI/CD, and
-deployment.
+**Not implemented yet:** a public deployment, webhooks, posting comments to GitHub,
+multi-user accounts or teams.
 
 See [docs/roadmap.md](docs/roadmap.md).
 
@@ -78,6 +91,7 @@ See [docs/roadmap.md](docs/roadmap.md).
 | Frontend | React 19, TypeScript, Vite, React Router    |
 | Testing  | Pytest, Vitest, Testing Library             |
 | Quality  | Ruff, ESLint, Prettier                      |
+| Delivery | Docker, Caddy, GitHub Actions               |
 | Infra    | Docker Compose (GitHub Actions CI planned)  |
 
 ## Project structure
@@ -197,6 +211,58 @@ OPENAI_MODEL=gpt-5.6-terra   # any Responses API model with structured-output su
 
 Budget and retry settings (`REVIEW_*`, `OPENAI_*`) are listed in [.env.example](.env.example).
 Requests are sent with `store: false`, so OpenAI does not keep them as stored responses.
+
+## Sign-in and access
+
+Authentication is **off by default** for local development (`AUTH_ENABLED=false`): the app
+works without signing in. Production requires it (`ENVIRONMENT=production` refuses to start
+otherwise).
+
+When enabled:
+
+1. The app shows a sign-in screen. **Sign in with GitHub** goes to `GET /api/auth/login`,
+   which redirects to GitHub with a random `state` and a PKCE challenge.
+2. GitHub redirects to `GET /api/auth/callback`. The backend checks `state`, exchanges the
+   code server-to-server, reads the user's public profile, and discards the OAuth token.
+3. If the login is in `AUTH_ALLOWED_GITHUB_USERS` (case-insensitive), a signed session cookie
+   is set. Otherwise the user sees "This GitHub account is not allowed".
+4. `GET /api/auth/me` reports the session; `POST /api/auth/logout` ends it.
+
+Every `/api/reviews*` and `/api/github/*` endpoint then requires a session (`401` otherwise).
+`/health`, `/ready`, and `/api/auth/*` stay public. The OAuth login is separate from
+`GITHUB_TOKEN`, which only reads pull requests. Details and the threat model are in
+[docs/deployment.md](docs/deployment.md#security-model).
+
+## Production and deployment
+
+```text
+Browser ──HTTPS──▶ Caddy (web) ──▶ FastAPI (api) ──▶ PostgreSQL (db, private network)
+                    │ static SPA        │
+                    └ /api, /health,    └──▶ GitHub API, OpenAI API
+                      /ready
+```
+
+- `backend/Dockerfile`: multi-stage, runtime dependencies only, non-root, one Uvicorn
+  process, `--proxy-headers` trusting only the proxy network.
+- `frontend/Dockerfile` + `frontend/Caddyfile`: Vite build served by Caddy with SPA fallback,
+  automatic HTTPS, security headers, compression, a 1 MB request limit, a 5-minute API
+  timeout, and access logs with OAuth callback parameters removed.
+- `docker-compose.prod.yml`: `db` → `migrate` (`alembic upgrade head`, must succeed) → `api`
+  (must be ready) → `web`. Only `web` publishes ports.
+
+Try the production stack locally:
+
+```bash
+cp .env.example .env.production   # set POSTGRES_PASSWORD, HTTP_PORT=8080, HTTPS_PORT=8443
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build --wait
+curl -k https://localhost:8443/ready
+```
+
+Configuration is grouped in [.env.example](.env.example) (application, database, GitHub
+ingestion, OpenAI, sign-in, review limits, Compose, tests), and each value is marked as
+required in production, optional, or test-only. Deployment steps, the hosting comparison,
+migrations and rollback, backups, and timeouts are in
+[docs/deployment.md](docs/deployment.md).
 
 ## Web app
 
@@ -472,6 +538,19 @@ npm run build
 ```
 
 Frontend tests (Vitest + Testing Library) mock the API layer, so they need no backend.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on pushes and pull requests to `main`, with a read-only token
+and superseded runs cancelled:
+
+| Job | What it checks |
+| --- | --- |
+| Repository hygiene | No committed `.env` files, build output, dependencies, or credential-like strings |
+| Backend | `pytest` (no database), `ruff check`, `ruff format --check` |
+| Backend (PostgreSQL) | Postgres 16 service: `alembic upgrade head`, `alembic check`, `tests/postgres` |
+| Frontend | `npm ci`, tests, lint, format check, build, no backend secrets in the bundle |
+| Production images | Build both images, inspect their contents, start `docker-compose.prod.yml` in production mode and smoke-test it |
 
 ## License
 

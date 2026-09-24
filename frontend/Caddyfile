@@ -1,0 +1,62 @@
+# RepoPilot web server: serves the built SPA and reverse-proxies the API on the same origin.
+#
+# SITE_ADDRESS  public host name, e.g. repopilot.example.com. Caddy obtains and renews a
+#               certificate automatically. "localhost" uses Caddy's local CA (dev/testing).
+# API_UPSTREAM  backend address on the private network (default api:8000).
+
+{
+	admin off
+}
+
+{$SITE_ADDRESS:localhost} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://avatars.githubusercontent.com; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		-Server
+	}
+
+	# API and probes go to FastAPI. Uncached reviews can take minutes (several model calls with
+	# retries), so the upstream response timeout is generous but finite.
+	@backend path /api/* /health /ready
+	handle @backend {
+		request_body {
+			max_size 1MB
+		}
+		reverse_proxy {$API_UPSTREAM:api:8000} {
+			transport http {
+				dial_timeout 5s
+				response_header_timeout 5m
+			}
+		}
+	}
+
+	# Everything else is the SPA: real files if they exist, otherwise index.html so client-side
+	# routes such as /reviews/<id> load on refresh or deep link.
+	handle {
+		root * /srv
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@pages not path /assets/*
+		header @pages Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Access log without the OAuth callback's one-time code and state. Cookie and Authorization
+	# headers are already redacted by Caddy's default logging.
+	log {
+		output stdout
+		format filter {
+			request>uri query {
+				delete code
+				delete state
+			}
+		}
+	}
+}

@@ -1,0 +1,8 @@
+# Only app/, alembic/, alembic.ini and requirements.txt are needed in the image.
+**
+!app/
+!alembic/
+!alembic.ini
+!requirements.txt
+**/__pycache__/
+**/*.py[cod]

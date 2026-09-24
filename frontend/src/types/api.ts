@@ -97,3 +97,15 @@ export interface PullRequestRef {
   repo: string;
   pullNumber: number;
 }
+
+export interface AuthUser {
+  login: string;
+  name: string | null;
+  avatar_url: string | null;
+}
+
+/** `GET /api/auth/me` */
+export interface AuthStatus {
+  auth_enabled: boolean;
+  user: AuthUser | null;
+}

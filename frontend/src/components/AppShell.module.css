@@ -52,19 +52,6 @@
   text-decoration: none;
 }
 
-.mark {
-  width: 26px;
-  height: 26px;
-}
-
-.markBg {
-  fill: var(--text);
-}
-
-.markFg {
-  stroke: var(--bg);
-}
-
 .nav {
   display: flex;
   align-items: center;
@@ -90,6 +77,27 @@
   color: var(--text);
   box-shadow: inset 0 -2px 0 var(--brand);
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.user {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.avatar {
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+
+.login {
+  max-width: 10rem;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .repoLink {
@@ -134,7 +142,8 @@
     padding: 0 1rem;
   }
 
-  .brandName {
+  .brandName,
+  .login {
     display: none;
   }
 

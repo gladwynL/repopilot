@@ -1,0 +1,11 @@
+.mark {
+  flex: none;
+}
+
+.bg {
+  fill: var(--text);
+}
+
+.fg {
+  stroke: var(--bg);
+}

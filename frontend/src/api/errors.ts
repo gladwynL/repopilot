@@ -35,6 +35,18 @@ export function toUserFacingError(error: unknown): UserFacingError {
   if (error.status === 0 || (error.status >= 500 && detail === null)) return UNREACHABLE;
 
   switch (error.status) {
+    case 401:
+      return {
+        title: 'Sign in required',
+        message: 'Your session has ended. Sign in again to continue.',
+        retryable: false,
+      };
+    case 403:
+      return {
+        title: 'Access denied',
+        message: detail ?? 'Your account is not allowed to use RepoPilot.',
+        retryable: false,
+      };
     case 404:
       return {
         title: 'Not found',
@@ -49,8 +61,8 @@ export function toUserFacingError(error: unknown): UserFacingError {
       };
     case 429:
       return {
-        title: 'GitHub rate limit reached',
-        message: `${detail ?? 'GitHub is limiting requests.'}${wait}`,
+        title: 'Too many requests',
+        message: `${detail ?? 'Too many requests right now.'}${wait}`,
         retryable: true,
       };
     case 502:

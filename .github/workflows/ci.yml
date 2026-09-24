@@ -1,0 +1,158 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Read-only token; no job needs to write to the repository or use deployment secrets.
+permissions:
+  contents: read
+
+# Cancel superseded runs of the same PR or branch; other branches are unaffected.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: '3.12'
+  NODE_VERSION: '24'
+
+jobs:
+  hygiene:
+    name: Repository hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: No env files, build output, or credentials committed
+        run: bash scripts/ci/check-repo-hygiene.sh
+
+  backend:
+    name: Backend (tests, lint, format)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      # The fast path: no database, no network (GitHub and OpenAI are mocked).
+      - run: pytest
+      - run: ruff check .
+      - run: ruff format --check .
+
+  backend-postgres:
+    name: Backend (PostgreSQL integration + migrations)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: repopilot
+          POSTGRES_PASSWORD: repopilot
+          POSTGRES_DB: repopilot_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U repopilot -d repopilot_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # Throwaway service container; the name satisfies the tests' "_test" safety rule.
+      TEST_DATABASE_URL: postgresql+psycopg://repopilot:repopilot@localhost:5432/repopilot_test
+      DATABASE_URL: postgresql+psycopg://repopilot:repopilot@localhost:5432/repopilot_test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - name: Migrate an empty database to head
+        run: alembic upgrade head
+      - name: Models and migrations agree
+        run: alembic check
+      - name: Integration tests (incl. downgrade/upgrade round trip)
+        run: pytest tests/postgres -v
+
+  frontend:
+    name: Frontend (tests, lint, format, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run test
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run build
+      - name: No backend secrets in the browser bundle
+        working-directory: .
+        run: bash scripts/ci/check-frontend-bundle.sh frontend/dist
+
+  docker:
+    name: Production images
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v4
+      - name: Build API image
+        uses: docker/build-push-action@v7
+        with:
+          context: backend
+          load: true
+          push: false
+          tags: repopilot-api:ci
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+      - name: Build web image
+        uses: docker/build-push-action@v7
+        with:
+          context: frontend
+          load: true
+          push: false
+          tags: repopilot-web:ci
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+      - name: Images contain no VCS data, env files, tests, or dev tooling
+        run: bash scripts/ci/check-images.sh repopilot-api:ci repopilot-web:ci
+      - name: Production stack starts, migrates, and serves
+        run: bash scripts/ci/smoke-compose.sh repopilot-api:ci repopilot-web:ci

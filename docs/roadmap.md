@@ -7,7 +7,8 @@
 | 2     | AI review engine: summaries and structured findings from a PR     | Done        |
 | 3     | Review persistence, caching, history, evaluation framework        | Done        |
 | 4     | Review dashboard (frontend)                                       | Done        |
-| 5+    | CI/CD, deployment                                                 | Not started |
+| 5     | CI, production containers, sign-in gate, deployment readiness     | Done (not yet deployed) |
+| 6     | Portfolio polish                                                  | Not started |
 
 ## Phase 1 — GitHub ingestion
 
@@ -93,7 +94,7 @@ Delivered (`frontend/src/`):
 
 Known limits:
 
-- No authentication: the dashboard and full history are visible to anyone who can reach it.
+- No authentication: the dashboard and full history were visible to anyone who could reach it (resolved in Phase 5).
 - A new review is a single long HTTP request with no progress reporting; leaving the page
   cancels the browser request (the backend may still finish and store the review).
 - The cached/new badge is only known right after a review request; reviews opened later by
@@ -101,6 +102,37 @@ Known limits:
 - File references are plain text, not links to GitHub.
 - Screenshots in the README are still to be added.
 
-## Phase 5 — next
+## Phase 5 — production readiness
 
-Planned: CI/CD and deployment. Details will be planned when the phase begins.
+Delivered:
+
+- Sign in with GitHub (OAuth web flow, state + PKCE S256, no scopes) with a case-insensitive
+  allowlist; signed session cookie; `/api/auth/{me,login,callback,logout}`; every review and
+  PR endpoint protected when `AUTH_ENABLED=true`; frontend sign-in screen and user menu
+- Startup validation of production settings (names only, never values); docs off in
+  production; wildcard CORS rejected
+- Per-process cap on concurrent AI reviews (`REVIEW_MAX_CONCURRENT`, 429 when full)
+- `backend/Dockerfile` (multi-stage, non-root), `frontend/Dockerfile` + Caddyfile (SPA, `/api`
+  proxy, TLS, headers, log redaction), `docker-compose.prod.yml` (one-shot migration, private
+  DB network, readiness gating)
+- GitHub Actions CI: hygiene, backend, PostgreSQL integration + migrations, frontend, and
+  production images with a Compose smoke test
+- `docs/deployment.md`: architecture, hosting comparison, VPS deployment, migrations and
+  rollback, backups, security model, timeouts
+
+Not done (blocked on external access, see the Phase 5 report):
+
+- No public deployment: needs a server/hosting account, a domain, a GitHub OAuth App, and
+  approval for any spending
+- No live OpenAI review or live evaluation run: no API key was available
+
+Known limits:
+
+- Sessions are stateless signed cookies: they can't be revoked individually (remove the
+  login from the allowlist or rotate `SESSION_SECRET`).
+- The review concurrency cap is per process, not global.
+- VPS backups are manual (`pg_dump`), and schema rollback is manual.
+
+## Phase 6 — next
+
+Portfolio polish. Not started; needs explicit approval.

@@ -1,5 +1,6 @@
 """Cache identity and ReviewService cache behavior (no database: in-memory store)."""
 
+import asyncio
 from collections.abc import Callable
 
 import httpx2 as httpx
@@ -7,11 +8,11 @@ import pytest
 
 from app.core.config import Settings
 from app.db.errors import PersistenceError
-from app.services.ai.base import AIConfigurationError
+from app.services.ai.base import AIConfigurationError, AIUnavailableError, ModelReview
 from app.services.ai.config import ReviewConfig, review_cache_key
 from app.services.ai.review_engine import ReviewEngine
 from app.services.github import GitHubClient, create_http_client
-from app.services.reviews import ReviewService
+from app.services.reviews import ReviewCapacityError, ReviewService
 from tests.github_payloads import raw_file, raw_pull_request
 from tests.review_helpers import FakeReviewModel, InMemoryReviewStore, make_engine, model_review
 
@@ -182,3 +183,51 @@ async def test_lookup_failure_stops_before_model_call() -> None:
         await service(store, factory).review_pull_request("octo-org", "widgets", 42)
 
     assert factory.calls == 0
+
+
+# --- concurrency guard ------------------------------------------------------------------
+
+
+async def test_review_is_refused_when_all_slots_are_busy() -> None:
+    store, factory = InMemoryReviewStore(), CountingFactory()
+    slots = asyncio.Semaphore(1)
+    await slots.acquire()  # another review is running
+
+    with pytest.raises(ReviewCapacityError):
+        await ReviewService(
+            github_client(), store, CONFIG, factory, review_slots=slots
+        ).review_pull_request("octo-org", "widgets", 42)
+
+    assert factory.model.prompts == []
+    assert store.rows == []
+
+
+async def test_cache_hits_do_not_need_a_slot() -> None:
+    store, factory = InMemoryReviewStore(), CountingFactory()
+    await service(store, factory).review_pull_request("octo-org", "widgets", 42)
+    slots = asyncio.Semaphore(1)
+    await slots.acquire()
+
+    result = await ReviewService(
+        github_client(), store, CONFIG, factory, review_slots=slots
+    ).review_pull_request("octo-org", "widgets", 42)
+
+    assert result.cached is True
+
+
+async def test_slot_is_released_after_a_failed_review() -> None:
+    slots = asyncio.Semaphore(1)
+
+    def failing() -> ReviewEngine:
+        return make_engine(FakeReviewModel(_raise_unavailable))
+
+    with pytest.raises(AIUnavailableError):
+        await ReviewService(
+            github_client(), InMemoryReviewStore(), CONFIG, failing, review_slots=slots
+        ).review_pull_request("octo-org", "widgets", 42)
+
+    assert not slots.locked()
+
+
+def _raise_unavailable(_: object) -> ModelReview:
+    raise AIUnavailableError()

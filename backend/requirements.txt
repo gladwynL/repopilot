@@ -1,6 +1,7 @@
 alembic>=1.14,<2
 fastapi>=0.115,<1
 httpx2>=2.13,<3
+itsdangerous>=2.2,<3
 openai>=3.19,<4
 psycopg[binary]>=3.2,<4
 pydantic-settings>=2.7,<3

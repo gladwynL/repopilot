@@ -1,0 +1,101 @@
+# Production-like stack: Caddy (TLS, SPA, /api proxy) → FastAPI → PostgreSQL.
+#
+#   cp .env.example .env.production   # fill in the "production" values
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# Only the web service publishes ports. The API is reachable only through Caddy, and the
+# database only from the API/migration containers. Migrations run once, before the API starts.
+name: repopilot-prod
+
+x-api-image: &api-image
+  image: ${API_IMAGE:-repopilot-api:latest}
+  build: ./backend
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-repopilot}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [data]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One deliberate migration step. The API only starts if this exits successfully.
+  migrate:
+    <<: *api-image
+    command: ['alembic', 'upgrade', 'head']
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-repopilot}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [data]
+    restart: 'no'
+
+  api:
+    <<: *api-image
+    restart: unless-stopped
+    env_file: ${APP_ENV_FILE:-.env.production}
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-repopilot}
+      # Trust X-Forwarded-* only from the edge network, i.e. from Caddy.
+      FORWARDED_ALLOW_IPS: ${EDGE_SUBNET:-172.28.240.0/24}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks: [data, edge]
+    healthcheck:
+      # Readiness (database reachable) gates the web service; the image's own check is liveness.
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=4)
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 6
+
+  web:
+    image: ${WEB_IMAGE:-repopilot-web:latest}
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+      API_UPSTREAM: api:8000
+    ports:
+      - '${HTTP_PORT:-80}:80'
+      - '${HTTPS_PORT:-443}:443'
+      - '${HTTPS_PORT:-443}:443/udp'
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [edge]
+
+networks:
+  # Database traffic only; no route to the internet.
+  data:
+    internal: true
+  # Caddy ↔ API, plus outbound internet for the API (GitHub, OpenAI) and Caddy (ACME).
+  edge:
+    ipam:
+      config:
+        - subnet: ${EDGE_SUBNET:-172.28.240.0/24}
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
