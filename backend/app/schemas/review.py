@@ -87,7 +87,7 @@ class ReviewResult(_Frozen):
 
 
 class StoredReview(_Frozen):
-    """A persisted review: the Phase 2 ``ReviewResult`` plus storage metadata."""
+    """A persisted review: the ``ReviewResult`` plus storage metadata."""
 
     id: UUID
     created_at: datetime

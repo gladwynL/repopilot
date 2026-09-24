@@ -1,138 +1,55 @@
 # Roadmap
 
-| Phase | Scope                                                             | Status      |
-| ----- | ----------------------------------------------------------------- | ----------- |
-| 0     | Repository foundation: FastAPI, React, PostgreSQL, tests, linting | Done        |
-| 1     | GitHub integration: fetch a PR and its diffs, normalize them      | Done        |
-| 2     | AI review engine: summaries and structured findings from a PR     | Done        |
-| 3     | Review persistence, caching, history, evaluation framework        | Done        |
-| 4     | Review dashboard (frontend)                                       | Done        |
-| 5     | CI, production containers, sign-in gate, deployment readiness     | Done (not yet deployed) |
-| 6     | Portfolio polish                                                  | Not started |
+RepoPilot was built in seven phases; all are complete.
 
-## Phase 1 — GitHub ingestion
+| Phase | Delivered |
+| --- | --- |
+| 0. Foundation | FastAPI + React/Vite skeleton, PostgreSQL via Compose, pytest/Vitest, Ruff/ESLint/Prettier |
+| 1. GitHub ingestion | Async read-only GitHub client with pagination; normalized `PullRequest` model; upstream errors mapped to API errors |
+| 2. AI review engine | Deterministic input budgeting and chunking, versioned prompts, OpenAI structured outputs, diff-grounded findings, code-based merging |
+| 3. Persistence and evaluation | PostgreSQL review history, cache keyed by commit and config, forced re-runs, evaluation runner and CLI, real-database integration tests |
+| 4. Dashboard | React dashboard: review form, honest pending state, review view, filterable history, responsive light/dark UI |
+| 5. Production readiness | GitHub OAuth + allowlist, startup config validation, Docker images, Caddy, production Compose with migrations, GitHub Actions CI |
+| 6. Portfolio polish | README, screenshots, architecture diagrams, API and engine docs, portfolio notes |
 
-Delivered:
+## Design decisions worth knowing
 
-- `GitHubClient` in `backend/app/services/github.py` (async, read-only, paginated file fetching)
-- Normalized `PullRequest` schema in `backend/app/schemas/pull_request.py`
-- `GET /api/github/repos/{owner}/{repo}/pulls/{pull_number}`
-- Mapping of GitHub failures to API errors
+- **One HTTPS origin** (Caddy serves the SPA and proxies `/api`): no production CORS, and
+  session cookies stay first-party.
+- **Deterministic review input**: the same PR and configuration always produce the same prompts,
+  which makes caching and debugging trustworthy.
+- **Grounding over trust**: file and line references the supplied diff can't support are
+  removed, and the model is told to prefer zero findings to speculative ones.
+- **Cache identity** includes everything that changes a review's content (commit SHA, model,
+  prompt version, budgets) and nothing that doesn't (timeouts, retries).
+- **Migrations are a deliberate step** (a one-shot `migrate` service), never run by API
+  processes at startup.
 
-Known limits:
+## Known limitations
 
-- GitHub's list-files endpoint returns at most 3,000 files per PR. Compare
-  `metadata.changed_files` with `len(files)` to detect truncation.
-- `patch` may be `null` (binary files, very large diffs).
-- Full file contents are not fetched; only diffs.
+- **No live validation yet.** There is no public deployment, and the pipeline and evaluation
+  suite have not been run against the live OpenAI API (tests use mocked responses).
+- **Review scope.** Only diffs are reviewed, not full files. Chunks are reviewed independently,
+  so cross-chunk issues can be missed, and multi-chunk summaries are joined rather than
+  rewritten. Findings about removed code carry no line number.
+- **Tokens are estimated** (`ceil(chars / 3)`), not counted with the model's tokenizer.
+- **Cost under races.** Concurrent uncached requests for the same PR each pay for a model call
+  (both results are stored, one becomes current). If the database fails after a successful
+  model call, that review is lost.
+- **Sessions** are stateless signed cookies. They can't be revoked individually; remove the
+  login from the allowlist or rotate `SESSION_SECRET`.
+- **The review concurrency cap is per process**, not global.
+- **Operations.** History uses offset pagination, there is no retention policy, and VPS
+  backups and schema rollback are manual.
+- **GitHub caps** the files it lists at 3,000 per PR, and `patch` is absent for binary or very
+  large files.
 
-## Phase 2 — AI review engine
+## Waiting on external access
 
-Pipeline: `PullRequest` → `ReviewInputBuilder` (skip, rank, truncate, chunk) → prompt layer →
-`ReviewModel` provider (OpenAI) → validated `ModelReview` per chunk → `ReviewEngine` merge
-(file/line grounding, confidence floor, deduplication) → `ReviewResult`.
+- A public deployment needs a server or hosting account, a domain, a GitHub OAuth App, and
+  approval for the spending. Everything else is ready (see [deployment.md](deployment.md)).
+- A live review and the evaluation suite need an `OPENAI_API_KEY` and a small approved budget.
 
-Code lives in `backend/app/services/ai/`:
+## Possible future work
 
-| Module               | Responsibility                                         |
-| -------------------- | ------------------------------------------------------ |
-| `base.py`            | Provider protocol, model-output schema, AI error types |
-| `diff.py`            | Unified-diff parsing for new-file line numbers         |
-| `review_input.py`    | Prepared-input data types                              |
-| `input_builder.py`   | File selection, budgeting, truncation, chunking        |
-| `prompts.py`         | Stable review instructions and PR/diff rendering       |
-| `openai_provider.py` | OpenAI Responses API calls, retries, error translation |
-| `review_engine.py`   | Orchestration, merging, deduplication                  |
-
-Known limits:
-
-- Chunks are reviewed independently; cross-chunk issues may be missed.
-- Multi-chunk summaries are concatenated rather than synthesized.
-- Line references cover the new side of the diff only; findings about removed code carry no
-  line number.
-- A failure in any chunk fails the whole review (no partial results).
-- Token counts are estimated (`ceil(chars / 3)`), not measured with the model's tokenizer.
-
-## Phase 3 — persistence and evaluation
-
-Delivered:
-
-- Tables `reviews`, `review_findings`, `review_test_suggestions`, `evaluation_runs`,
-  `evaluation_case_results` (Alembic revision `0001`)
-- `ReviewRepository` / `EvaluationRepository` in `backend/app/repositories/` (all SQL lives there)
-- `ReviewService` in `backend/app/services/reviews.py`: GitHub → cache lookup → review → save
-- Cache key: SHA-256 of owner/repo (lowercased), PR number, `head_sha`, and `ReviewConfig`
-  (provider, model, prompt version, budget settings, confidence floor)
-- One current review per key (partial unique index), forced re-runs kept as history,
-  saves for a key serialized with a PostgreSQL advisory lock
-- `GET /api/reviews`, `GET /api/reviews/{id}`, `POST /api/reviews/github?force=true`, `GET /ready`
-- Evaluation cases, per-condition checks, runner, and `python -m app.services.evaluation` CLI
-- Disposable `test-db` Compose service and PostgreSQL integration tests (`tests/postgres/`)
-
-Known limits:
-
-- Live evaluation has not been run yet (no OpenAI key was available); no model-quality numbers
-  exist.
-- The evaluation suite has four tiny cases and checks behaviors, not accuracy.
-- Concurrent uncached requests for the same PR can each pay for a model call (both results
-  are stored; one becomes current).
-- If the database fails after a successful model call, that review is lost (returns 503).
-- History uses offset pagination; fine for dashboard-sized data, not for very deep paging.
-- Reviews are never deleted; there is no retention policy yet.
-
-## Phase 4 — review dashboard
-
-Delivered (`frontend/src/`):
-
-- Routes: `/` (dashboard and new review), `/reviews` (history), `/reviews/:reviewId`, 404
-- Typed API client (`api/`) with central error mapping; pages never call `fetch` directly
-- One `ReviewView` for fresh, cached, and historical reviews
-- Small design system (Button, Badge, Card, Alert, EmptyState, PageHeader, fields, Spinner)
-  with CSS Modules and system light/dark themes
-- Vite dev/preview proxy for `/api`; `VITE_API_BASE_URL` for other setups
-- Vitest + Testing Library tests with the API layer mocked
-
-Known limits:
-
-- No authentication: the dashboard and full history were visible to anyone who could reach it (resolved in Phase 5).
-- A new review is a single long HTTP request with no progress reporting; leaving the page
-  cancels the browser request (the backend may still finish and store the review).
-- The cached/new badge is only known right after a review request; reviews opened later by
-  URL show current/superseded status instead.
-- File references are plain text, not links to GitHub.
-- Screenshots in the README are still to be added.
-
-## Phase 5 — production readiness
-
-Delivered:
-
-- Sign in with GitHub (OAuth web flow, state + PKCE S256, no scopes) with a case-insensitive
-  allowlist; signed session cookie; `/api/auth/{me,login,callback,logout}`; every review and
-  PR endpoint protected when `AUTH_ENABLED=true`; frontend sign-in screen and user menu
-- Startup validation of production settings (names only, never values); docs off in
-  production; wildcard CORS rejected
-- Per-process cap on concurrent AI reviews (`REVIEW_MAX_CONCURRENT`, 429 when full)
-- `backend/Dockerfile` (multi-stage, non-root), `frontend/Dockerfile` + Caddyfile (SPA, `/api`
-  proxy, TLS, headers, log redaction), `docker-compose.prod.yml` (one-shot migration, private
-  DB network, readiness gating)
-- GitHub Actions CI: hygiene, backend, PostgreSQL integration + migrations, frontend, and
-  production images with a Compose smoke test
-- `docs/deployment.md`: architecture, hosting comparison, VPS deployment, migrations and
-  rollback, backups, security model, timeouts
-
-Not done (blocked on external access, see the Phase 5 report):
-
-- No public deployment: needs a server/hosting account, a domain, a GitHub OAuth App, and
-  approval for any spending
-- No live OpenAI review or live evaluation run: no API key was available
-
-Known limits:
-
-- Sessions are stateless signed cookies: they can't be revoked individually (remove the
-  login from the allowlist or rotate `SESSION_SECRET`).
-- The review concurrency cap is per process, not global.
-- VPS backups are manual (`pg_dump`), and schema rollback is manual.
-
-## Phase 6 — next
-
-Portfolio polish. Not started; needs explicit approval.
+See [portfolio.md](portfolio.md#future-work).

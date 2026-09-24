@@ -1,6 +1,6 @@
 # Deploying RepoPilot
 
-Status: **deployment-ready, not deployed.** Everything below has been built and tested locally
+Status: **deployment-ready, not deployed.** Everything below is built and tested, locally and in CI
 (production images, production Compose stack, migrations, health checks, the sign-in gate), but
 no public instance exists yet. It needs a server or hosting account, a domain, a GitHub OAuth
 App, and an OpenAI API key.
@@ -112,7 +112,7 @@ separate, deliberate step: API processes never migrate on startup, so replicas c
   (add before you remove).
 - **Rolling back the schema** is manual: take a backup, then run
   `docker compose -f docker-compose.prod.yml --env-file .env.production run --rm migrate alembic downgrade <revision>`.
-  Downgrades can drop data (the Phase 3 downgrade drops every review table).
+  Downgrades can drop data (downgrading revision `0001` drops every review table).
 
 ### Backups
 

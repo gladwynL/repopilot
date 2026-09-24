@@ -24,7 +24,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      <title>RepoPilot — Review a pull request</title>
+      <title>RepoPilot — AI Pull Request Review</title>
       <PageHeader
         title="Review a pull request"
         description="AI-assisted review of GitHub pull requests: a summary, an overall risk assessment, findings with file and line references, and test suggestions."
